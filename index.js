@@ -41,16 +41,36 @@ co.wrap = function (fn) {
  */
 
 function co(gen) {
+
+  // 让ctx指向全局变量
   var ctx = this;
+
+  // slice 函数的作用是什么？
+  // 抛掉第0个元素，从第一个开始取出
+  // 为什么要这么用呢，因为arguments是一个对象，而不是 array , 所以它没有 slice 这个方法
+  // 使用的话就会报错
   var args = slice.call(arguments, 1);
 
   // we wrap everything in a promise to avoid promise chaining,
   // which leads to memory leak errors.
   // see https://github.com/tj/co/issues/180
-  return new Promise(function(resolve, reject) {
-    if (typeof gen === 'function') gen = gen.apply(ctx, args);
-    if (!gen || typeof gen.next !== 'function') return resolve(gen);
 
+  //返回一个Promise对象
+  return new Promise(function(resolve, reject) {
+    //如果是一个普通的函数，就直接执行它？
+    //如果不是一个生成器，而是一个普通的函数，那么就生成一个函数就好了
+    if (typeof gen === 'function'){
+      console.log('是一个函数');
+      gen = gen.apply(ctx, args);
+    } 
+
+    //如果不是生成器，那么就直接返回它
+    if (!gen || typeof gen.next !== 'function'){
+      console.log("不是生成器");
+      return resolve(gen);
+    } 
+
+    // 处理生成器部分
     onFulfilled();
 
     /**
@@ -62,6 +82,7 @@ function co(gen) {
     function onFulfilled(res) {
       var ret;
       try {
+        //第一次执行，拿到上一次的结果
         ret = gen.next(res);
       } catch (e) {
         return reject(e);
@@ -96,12 +117,15 @@ function co(gen) {
      */
 
     function next(ret) {
+      // 如果生成器已经结束了，那么promise返回
       if (ret.done) return resolve(ret.value);
+      // 
       var value = toPromise.call(ctx, ret.value);
       if (value && isPromise(value)) return value.then(onFulfilled, onRejected);
       return onRejected(new TypeError('You may only yield a function, promise, generator, array, or object, '
         + 'but the following object was passed: "' + String(ret.value) + '"'));
     }
+
   });
 }
 
@@ -116,7 +140,7 @@ function co(gen) {
 function toPromise(obj) {
   if (!obj) return obj;
   if (isPromise(obj)) return obj;
-  if (isGeneratorFunction(obj) || isGenerator(obj)) return co.call(this, obj);
+  if (isGeneratorFunction(obj) || isGenerator(obj)) return co(obj);
   if ('function' == typeof obj) return thunkToPromise.call(this, obj);
   if (Array.isArray(obj)) return arrayToPromise.call(this, obj);
   if (isObject(obj)) return objectToPromise.call(this, obj);
